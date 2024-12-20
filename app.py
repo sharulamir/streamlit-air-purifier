@@ -12,36 +12,32 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+import time
 
 # Unified Air Purifier Data Generation Algorithm
-def generate_air_purifier_data(n_samples=20000, noise_level=5):
+def generate_live_data(n_samples=200):
     """
-    Generate synthetic data for air purifier sensor readings, compute derived features,
-    and create regression and classification targets in one streamlined process.
+    Generate synthetic live data for air purifier sensor readings.
 
     Parameters:
         n_samples (int): Number of data points to generate.
-        noise_level (float): Standard deviation of noise to add to the targets.
 
     Returns:
         pd.DataFrame: A DataFrame containing generated features and targets.
     """
-    np.random.seed(42)  # For reproducibility
+    np.random.seed()
     runtime = np.random.uniform(100, 10000, n_samples)      # Runtime in hours
     pm25 = np.random.uniform(10, 200, n_samples)           # PM2.5 levels
     fan_speed = np.random.choice([1, 2, 3, 4], n_samples)  # Fan speed levels
     odor_level = np.random.uniform(0, 100, n_samples)      # Odor sensor readings
     dust_level = np.random.uniform(0, 100, n_samples)      # Dust sensor readings
 
-    pm25_rolling_avg = pd.Series(pm25).rolling(window=5, min_periods=1).mean().to_numpy()
-    odor_trend = np.diff(np.insert(odor_level, 0, 0))  # Change in odor levels
-
     remaining_days = 60 - (
         odor_level / 2 +
         dust_level / 2 +
         runtime / 300 +
         pm25 / 10
-    ) + np.random.normal(0, noise_level, n_samples)
+    ) + np.random.normal(0, 5, n_samples)
 
     filter_health = np.digitize(remaining_days, bins=[20, 40], right=True)
 
@@ -51,42 +47,50 @@ def generate_air_purifier_data(n_samples=20000, noise_level=5):
         'fan_speed': fan_speed,
         'odor_level': odor_level,
         'dust_level': dust_level,
-        'pm25_rolling_avg': pm25_rolling_avg,
-        'odor_trend': odor_trend,
         'remaining_days': remaining_days,
         'filter_health': filter_health
     })
 
     return data
 
-# Streamlit Dashboard
-def air_purifier_dashboard(data):
+# Streamlit Dashboard with Real-Time Monitoring
+def air_purifier_dashboard():
     st.title("Air Purifier Real-Time Monitoring Dashboard")
 
-    # Overview of Data
-    st.write("### Dataset Overview")
-    st.dataframe(data.head())
+    # Real-Time Monitoring
+    st.write("### Live Data Updates")
+    placeholder = st.empty()
 
-    # Filter Health Distribution
-    st.write("### Filter Health Distribution")
-    health_counts = data['filter_health'].value_counts()
-    st.bar_chart(health_counts)
+    # Simulate real-time data updates
+    while True:
+        # Generate new data
+        data = generate_live_data()
 
-    # Real-Time Scatter Plot
-    st.write("### Runtime vs. Remaining Days")
-    st.scatter_chart(data[['runtime', 'remaining_days']])
+        # Display live data table
+        with placeholder.container():
+            st.write("#### Live Data")
+            st.dataframe(data.head())
 
-    # Correlation Heatmap
-    st.write("### Feature Correlations")
-    corr = data.corr()
-    fig, ax = plt.subplots(figsize=(12, 8))
-    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-    st.pyplot(fig)
+            # Visualization: Filter Health Distribution
+            st.write("#### Filter Health Distribution")
+            health_counts = data['filter_health'].value_counts()
+            st.bar_chart(health_counts)
+
+            # Visualization: Runtime vs Remaining Days
+            st.write("#### Runtime vs Remaining Days")
+            fig, ax = plt.subplots()
+            ax.scatter(data['runtime'], data['remaining_days'], alpha=0.6)
+            ax.set_title("Runtime vs Remaining Days")
+            ax.set_xlabel("Runtime (Hours)")
+            ax.set_ylabel("Remaining Days")
+            st.pyplot(fig)
+
+        # Wait before updating
+        time.sleep(5)  # Refresh every 5 seconds
 
 # Main Function
 def main():
-    data = generate_air_purifier_data(n_samples=2000, noise_level=5)
-    air_purifier_dashboard(data)
+    air_purifier_dashboard()
 
 if __name__ == "__main__":
     main()
