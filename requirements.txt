@@ -1,5 +1,8 @@
 streamlit
-numpy
+xgboost
 pandas
+numpy
 matplotlib
 seaborn
+scikit-learn
+optuna
