@@ -126,7 +126,7 @@ def main():
     best_params = optimize_xgboost(training_data)
     model, X_test, y_test, predictions = train_model(training_data, best_params)
 
-    # Step 2: Custom Input for Testing
+    # Step 2: Custom Input for Testing (processed AFTER training)
     custom_data = pd.DataFrame({
         'runtime': [4000],
         'pm25': [100],
@@ -134,22 +134,11 @@ def main():
         'odor_level': [60],
         'dust_level': [50]
     })
-
-    # Ensure custom_data matches model features
-    feature_names = ['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']
-    custom_data = custom_data[feature_names]
-
-    # Make prediction for the custom input
     custom_data['predicted_remaining_days'] = model.predict(custom_data)
     custom_data['status'] = custom_data['predicted_remaining_days'].apply(notify_user)
 
-    # Step 3: Generate Live Data for Monitoring (Synthetic)
+    # Step 3: Generate Live Data for Monitoring (Synthetic, processed AFTER training)
     live_data = load_real_data(file_path, n_samples=100, use_synthetic=use_synthetic)
-
-    # Ensure live_data matches model features
-    live_data = live_data[feature_names]
-
-    # Predict for live_data
     live_data['predicted_remaining_days'] = model.predict(live_data)
     live_data['status'] = live_data['predicted_remaining_days'].apply(notify_user)
 
