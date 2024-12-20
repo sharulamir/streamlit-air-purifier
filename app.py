@@ -126,28 +126,24 @@ def main():
     best_params = optimize_xgboost(training_data)
     model, X_test, y_test, predictions = train_model(training_data, best_params)
 
-    # Step 2: Custom Input for Testing (processed AFTER training)
-    custom_data = pd.DataFrame({
-        'runtime': [4000],
-        'pm25': [100],
-        'fan_speed': [3],
-        'odor_level': [60],
-        'dust_level': [50]
-    })
-    custom_data['predicted_remaining_days'] = model.predict(custom_data)
-    custom_data['status'] = custom_data['predicted_remaining_days'].apply(notify_user)
-
-    # Step 3: Generate Live Data for Monitoring (Synthetic, processed AFTER training)
+    # Step 2: Generate live data for monitoring
     live_data = load_real_data(file_path, n_samples=100, use_synthetic=use_synthetic)
-    live_data['predicted_remaining_days'] = model.predict(live_data)
-    live_data['status'] = live_data['predicted_remaining_days'].apply(notify_user)
 
-    # Step 4: Combine Custom Input and Live Data for Dashboard
-    combined_data = pd.concat([custom_data, live_data], ignore_index=True)
+    # Ensure live_data only includes features used for training
+    feature_names = ['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']
+    live_data_features = live_data[feature_names]  # Drop extra columns
 
-    # Launch the dashboard
-    air_purifier_dashboard(combined_data, model)
+    # Step 3: Predict on live data and handle potential errors
+    try:
+        live_data['predicted_remaining_days'] = model.predict(live_data_features)
+        live_data['status'] = live_data['predicted_remaining_days'].apply(notify_user)
+    except ValueError as e:
+        st.error(f"Prediction error: {e}")
+        live_data['predicted_remaining_days'] = None
+        live_data['status'] = "Error"
 
+    # Step 4: Launch the dashboard
+    air_purifier_dashboard(live_data, model)
 
 if __name__ == "__main__":
     main()
