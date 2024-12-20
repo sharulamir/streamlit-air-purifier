@@ -17,40 +17,45 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import optuna
 
-# Step 1: Generate Synthetic Data
-def generate_synthetic_data(n_samples=10000, noise_level=5):
-    np.random.seed(42)  # For reproducibility
-    runtime = np.random.uniform(100, 10000, n_samples)      # Runtime in hours
-    pm25 = np.random.uniform(10, 200, n_samples)           # PM2.5 levels
-    fan_speed = np.random.choice([1, 2, 3, 4], n_samples)  # Fan speed levels
-    odor_level = np.random.uniform(0, 100, n_samples)      # Odor sensor readings
-    dust_level = np.random.uniform(0, 100, n_samples)      # Dust sensor readings
+# Step 1: Load Real Data or Use Synthetic Data
+def load_real_data(file_path=None, n_samples=20000, use_synthetic=True):
+    """
+    Load real-world sensor data or generate synthetic data.
 
-    # Target: Remaining days before cleaning
-    remaining_days = 60 - (
-        odor_level / 2 +
-        dust_level / 2 +
-        runtime / 300 +
-        pm25 / 10
-    ) + np.random.normal(0, noise_level, n_samples)
+    Parameters:
+        file_path (str): Path to the real sensor data file.
+        n_samples (int): Number of synthetic data points to generate.
+        use_synthetic (bool): Whether to generate synthetic data.
 
-    data = pd.DataFrame({
-        'runtime': runtime,
-        'pm25': pm25,
-        'fan_speed': fan_speed,
-        'odor_level': odor_level,
-        'dust_level': dust_level,
-        'remaining_days': remaining_days
-    })
-    return data
+    Returns:
+        pd.DataFrame: The dataset (real or synthetic).
+    """
+    if not use_synthetic and file_path:
+        # Load real data
+        return pd.read_csv(file_path)
+    else:
+        # Generate synthetic data
+        np.random.seed(42)
+        runtime = np.random.uniform(100, 10000, n_samples)
+        pm25 = np.random.uniform(10, 200, n_samples)
+        fan_speed = np.random.choice([1, 2, 3, 4], n_samples)
+        odor_level = np.random.uniform(0, 100, n_samples)
+        dust_level = np.random.uniform(0, 100, n_samples)
+        remaining_days = 60 - (
+            odor_level / 2 + dust_level / 2 + runtime / 300 + pm25 / 10
+        ) + np.random.normal(0, 5, n_samples)
+        return pd.DataFrame({
+            'runtime': runtime,
+            'pm25': pm25,
+            'fan_speed': fan_speed,
+            'odor_level': odor_level,
+            'dust_level': dust_level,
+            'remaining_days': remaining_days
+        })
 
 # Step 2: Optimize Hyperparameters with Optuna
 def optimize_xgboost(data):
-    """
-    Optimize XGBoost hyperparameters using Optuna.
-    """
     def objective(trial):
-        # Define the hyperparameter space
         params = {
             'n_estimators': trial.suggest_int('n_estimators', 50, 300),
             'max_depth': trial.suggest_int('max_depth', 3, 15),
@@ -59,76 +64,51 @@ def optimize_xgboost(data):
             'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
             'random_state': 42
         }
-
-        # Split the data
         X = data[['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']]
         y = data['remaining_days']
         X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=42)
-
-        # Train the model
         model = XGBRegressor(**params)
         model.fit(X_train, y_train)
-
-        # Evaluate on validation set
         predictions = model.predict(X_valid)
-        mse = mean_squared_error(y_valid, predictions)
-        return mse
+        return mean_squared_error(y_valid, predictions)
 
-    # Run the optimization
     study = optuna.create_study(direction='minimize')
     study.optimize(objective, n_trials=50)
-
-    # Best hyperparameters
     print("Best Hyperparameters:", study.best_params)
     return study.best_params
 
-# Step 3: Train Model with Best Hyperparameters
+# Step 3: Train the Model
 def train_model(data, best_params):
-    """
-    Train an XGBoost Regressor with the best hyperparameters.
-    """
-    # Features and target
     X = data[['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']]
     y = data['remaining_days']
-
-    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Train XGBoost Regressor
     model = XGBRegressor(**best_params)
     model.fit(X_train, y_train)
-
-    # Predictions
     predictions = model.predict(X_test)
-
-    # Evaluate the model
     mse = mean_squared_error(y_test, predictions)
     r2 = r2_score(y_test, predictions)
     print(f"Model Performance: MSE = {mse:.2f}, R^2 = {r2:.2f}")
-
     return model, X_test, y_test, predictions
 
-# Step 4: Streamlit Dashboard
+# Step 4: Notify User
+def notify_user(predicted_remaining_days):
+    if predicted_remaining_days <= 0:
+        return "Needs Cleaning"
+    elif 1 <= predicted_remaining_days <= 3:
+        return "Prepare for Cleaning"
+    else:
+        return "Good"
+
+# Step 5: Streamlit Dashboard
 def air_purifier_dashboard(data, model):
     st.title("Air Purifier Real-Time Monitoring and Forecasting Dashboard")
-
-    # Display live data
     st.write("### Live Sensor Data")
     st.dataframe(data.head())
-
-    # Predict remaining days for live data
     X_live = data[['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']]
     data['predicted_remaining_days'] = model.predict(X_live)
-
-    # Add a threshold for cleaning alerts
-    threshold = 0  # Filters with predicted_remaining_days <= 0 need cleaning
-    data['status'] = data['predicted_remaining_days'].apply(lambda x: 'Needs Cleaning' if x <= threshold else 'Good')
-
-    # Display predictions
+    data['status'] = data['predicted_remaining_days'].apply(notify_user)
     st.write("### Predicted Remaining Days for Cleaning")
     st.dataframe(data[['runtime', 'pm25', 'odor_level', 'dust_level', 'predicted_remaining_days', 'status']])
-
-    # Visualization: Remaining Days Distribution
     st.write("### Predicted Remaining Days Distribution")
     fig, ax = plt.subplots()
     sns.histplot(data['predicted_remaining_days'], kde=True, bins=30, ax=ax, color='blue')
@@ -137,17 +117,17 @@ def air_purifier_dashboard(data, model):
 
 # Main Function
 def main():
-    # Generate synthetic training data
-    training_data = generate_synthetic_data(n_samples=10000)
+    # Choose synthetic or real data (use synthetic for now)
+    use_synthetic = True
+    file_path = None  # Set path to real data CSV if available
+    training_data = load_real_data(file_path, n_samples=20000, use_synthetic=use_synthetic)
 
-    # Optimize hyperparameters
+    # Optimize and train the model
     best_params = optimize_xgboost(training_data)
-
-    # Train the model with best hyperparameters
     model, X_test, y_test, predictions = train_model(training_data, best_params)
 
-    # Generate live data for real-time monitoring
-    live_data = generate_synthetic_data(n_samples=100)
+    # Generate live data for monitoring
+    live_data = load_real_data(file_path, n_samples=100, use_synthetic=use_synthetic)
 
     # Launch the dashboard
     air_purifier_dashboard(live_data, model)
