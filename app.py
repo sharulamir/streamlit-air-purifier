@@ -117,20 +117,38 @@ def air_purifier_dashboard(data, model):
 
 # Main Function
 def main():
-    # Choose synthetic or real data (use synthetic for now)
+    # Step 1: Train the model with synthetic data
     use_synthetic = True
-    file_path = None  # Set path to real data CSV if available
+    file_path = None
     training_data = load_real_data(file_path, n_samples=20000, use_synthetic=use_synthetic)
 
-    # Optimize and train the model
+    # Optimize hyperparameters and train the model
     best_params = optimize_xgboost(training_data)
     model, X_test, y_test, predictions = train_model(training_data, best_params)
 
-    # Generate live data for monitoring
+    # Step 2: Custom Input for Testing
+    custom_data = pd.DataFrame({
+        'runtime': [500],
+        'pm25': [100],
+        'fan_speed': [3],
+        'odor_level': [60],
+        'dust_level': [50]
+    })
+
+    # Make prediction for the custom input
+    custom_data['predicted_remaining_days'] = model.predict(custom_data)
+    custom_data['status'] = custom_data['predicted_remaining_days'].apply(notify_user)
+
+    # Step 3: Generate Live Data for Monitoring (Synthetic)
     live_data = load_real_data(file_path, n_samples=100, use_synthetic=use_synthetic)
+    live_data['predicted_remaining_days'] = model.predict(live_data)
+    live_data['status'] = live_data['predicted_remaining_days'].apply(notify_user)
+
+    # Step 4: Combine Custom Input and Live Data for Dashboard
+    combined_data = pd.concat([custom_data, live_data], ignore_index=True)
 
     # Launch the dashboard
-    air_purifier_dashboard(live_data, model)
+    air_purifier_dashboard(combined_data, model)
 
 if __name__ == "__main__":
     main()
