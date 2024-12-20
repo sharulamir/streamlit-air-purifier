@@ -18,7 +18,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 import optuna
 
 # Step 1: Generate Synthetic Data
-def generate_synthetic_data(n_samples=2000, noise_level=5):
+def generate_synthetic_data(n_samples=10000, noise_level=5):
     np.random.seed(42)  # For reproducibility
     runtime = np.random.uniform(100, 10000, n_samples)      # Runtime in hours
     pm25 = np.random.uniform(10, 200, n_samples)           # PM2.5 levels
@@ -120,9 +120,13 @@ def air_purifier_dashboard(data, model):
     X_live = data[['runtime', 'pm25', 'fan_speed', 'odor_level', 'dust_level']]
     data['predicted_remaining_days'] = model.predict(X_live)
 
+    # Add a threshold for cleaning alerts
+    threshold = 0  # Filters with predicted_remaining_days <= 0 need cleaning
+    data['status'] = data['predicted_remaining_days'].apply(lambda x: 'Needs Cleaning' if x <= threshold else 'Good')
+
     # Display predictions
     st.write("### Predicted Remaining Days for Cleaning")
-    st.dataframe(data[['runtime', 'pm25', 'odor_level', 'dust_level', 'predicted_remaining_days']])
+    st.dataframe(data[['runtime', 'pm25', 'odor_level', 'dust_level', 'predicted_remaining_days', 'status']])
 
     # Visualization: Remaining Days Distribution
     st.write("### Predicted Remaining Days Distribution")
@@ -134,7 +138,7 @@ def air_purifier_dashboard(data, model):
 # Main Function
 def main():
     # Generate synthetic training data
-    training_data = generate_synthetic_data(n_samples=2000)
+    training_data = generate_synthetic_data(n_samples=10000)
 
     # Optimize hyperparameters
     best_params = optimize_xgboost(training_data)
